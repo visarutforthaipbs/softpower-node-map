@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Drawing Parallel Edges with Zoom</title>
+    <meta charset="utf-8" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.16/d3.min.js" charset="utf-8"
+        type="text/javascript"></script>
+    <style>
+        /* Importing Google Fonts */
+        @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@100;200;300;400;500;600;700&display=swap");
+
+        * {
+            font-family: 'IBM Plex Sans Thai', sans-serif;
+        }
+
+        :root {
+            --text-color: #b8424c;
+            --background-color: #c6ae73;
+            --card-background-color: #45589c;
+            --shadow-color: black;
+            --content-width: 60%;
+            --tex-color-main: #282828;
+            --h3-color-text: #7dad7d;
+            --mainfont: "IBM Plex Sans Thai", sans-serif;
+        }
+
+        body,
+        html {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: visible;
+            background-color: #c6ae73;
+        }
+
+        #viz {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            overflow: visible;
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+            overflow: visible;
+        }
+
+        .note {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background-color: var(--card-background-color);
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: wheat;
+            font-family: 'IBM Plex Sans Thai', sans-serif;
+            opacity: 0.8;
+        }
+
+        .description {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: var(--card-background-color);
+            padding: 10px 10px 10px 20px;
+            /* Adjust padding to make space for the close button */
+            border-radius: 4px;
+            font-size: 14px;
+            color: white;
+            font-family: 'IBM Plex Sans Thai', sans-serif;
+            width: 250px;
+            /* Adjust width as needed */
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            box-sizing: border-box;
+            /* Ensure padding is included in width */
+        }
+
+        .close-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background-color: var(--h3-color-text);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 14px;
+            line-height: 1;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="viz">
+        <div class="description" id="description">
+            <button class="close-btn" id="closeBtn">&times;</button>
+            <strong>Soft Power อีสานมีอะไรบ้าง</strong><br>
+            แผนที่เครือข่ายเพื่อใช้แสดงข้อมูลของซอฟต์พาวเวอร์จากภาคอีสาน<br>
+        </div>
+        <div class="note">ซูมเข้า-ออก โดยใช้สกอร์เมาส์</div>
+        <svg viewBox="0 0 800 800" preserveAspectRatio="xMidYMid meet"></svg> <!-- Ensure scaling and centering -->
+    </div>
+
+    <script>
+        var zoom = d3.behavior.zoom()
+            .scaleExtent([0.5, 10]) // Define zoom scale limits
+            .on("zoom", zoomed);
+
+        var svg = d3.select("svg")
+            .call(zoom);
+
+        var container = svg.append("g");
+
+        d3.csv("soft-power-node-test.csv", function (error, data) {
+            if (error) throw error;
+            createNetwork(data);
+        });
+
+        function zoomed() {
+            container.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
+        }
+
+        function offsetEdge(d, sourceSize, targetSize) {
+            var sourceCirc = sourceSize * 2 * Math.PI;
+            var targetCirc = targetSize * 2 * Math.PI;
+            var stRatio = sourceCirc / targetCirc;
+
+            var diffX = d.target.y - d.source.y;
+            var diffY = d.target.x - d.source.x;
+
+            var angle0 = (Math.atan2(diffY, diffX) + (Math.PI / 2));
+            var angle1 = angle0 + ((Math.PI * 0.75) + (d.edgeNumber * 0.25));
+            var angle2 = angle0 + ((Math.PI * 0.25) - (d.edgeNumber * 0.25));
+
+            var x1 = d.source.x + (sourceSize * Math.cos(angle1));
+            var y1 = d.source.y - (sourceSize * Math.sin(angle1));
+            var x2 = d.target.x + (targetSize * Math.cos(angle2));
+            var y2 = d.target.y - (targetSize * Math.sin(angle2));
+
+            return { x1: x1, y1: y1, x2: x2, y2: y2 };
+        }
+
+        function createNetwork(edgelist) {
+            var nodeHash = {};
+            var edgeHash = {};
+            var nodes = [];
+            var edges = [];
+
+            var marker = container.append('defs')
+                .append('marker')
+                .attr("id", "Triangle")
+                .attr("refX", 6)
+                .attr("refY", 3)
+                .attr("markerUnits", 'userSpaceOnUse')
+                .attr("markerWidth", 6)
+                .attr("markerHeight", 9)
+                .attr("orient", 'auto')
+                .append('path')
+                .style("fill", "#7dad7d")
+                .attr("d", 'M 0 0 6 3 0 6 1.5 3');
+
+            edgelist.forEach(function (edge, i) {
+                if (!nodeHash[edge.source]) {
+                    nodeHash[edge.source] = { id: edge.source, label: edge.source };
+                    nodes.push(nodeHash[edge.source]);
+                }
+                if (!nodeHash[edge.target]) {
+                    nodeHash[edge.target] = { id: edge.target, label: edge.target };
+                    nodes.push(nodeHash[edge.target]);
+                }
+                edges.push({ source: nodeHash[edge.source], target: nodeHash[edge.target], weight: 1, edgeNumber: edge.edgeNumber });
+            });
+            createForceNetwork(nodes, edges);
+        }
+
+        function createForceNetwork(nodes, edges) {
+            var sizeScale = d3.scale.linear().domain([1, 20]).range([20, 40]);
+
+            var force = d3.layout.force().nodes(nodes).links(edges)
+                .size([800, 800])
+                .charge(function (d) { return d.weight * -200 })
+                .linkDistance(100)
+                .gravity(.05)
+                .on("tick", updateNetwork);
+
+            container.selectAll("line")
+                .data(edges)
+                .enter()
+                .append("line")
+                .style("stroke-width", "1px")
+                .style("stroke", "#7dad7d")
+                .attr("marker-end", "url(#Triangle)");
+
+            var nodeEnter = container.selectAll("g")
+                .data(nodes)
+                .enter()
+                .append("g")
+                .attr("class", "node")
+                .call(force.drag());
+
+            nodeEnter.append("circle")
+                .attr("class", "node")
+                .style("fill", function (d) {
+                    if (d.id === "ซอฟต์พาวเวอร์อีสาน") {
+                        return "#b8424c"; // Unique color for this node
+                    } else if (d.id === "ภาพยนตร์") {
+                        return "#7dad7d"; // Color for Node2
+                    } else if (d.id === "อาหาร") {
+                        return "#7dad7d"; // Color for Node3
+                    } else if (d.id === "เพลง") {
+                        return "#7dad7d"; // Color for Node4
+                    } else if (d.id === "อาหาร") {
+                        return "#7dad7d"; // Color for Node5
+                    } else if (d.id === "สถานที่ท่องเที่ยว") {
+                        return "#7dad7d"; // Color for Node5
+                    } else if (d.id === "แฟชั่น") {
+                        return "#7dad7d"; // Color for Node5
+                    } else if (d.id === "กีฬา") {
+                        return "#7dad7d"; // Color for Node5
+                    } else {
+                        return "#45589c"; // Default color for other nodes
+                    }
+                })
+                .style("stroke", "#7dad7d")
+                .style("stroke-width", "1px")
+                .attr("r", function (d) {
+                    return d.id === "ซอฟต์พาวเวอร์อีสาน" ? 60 : sizeScale(d.weight); // Larger radius for the specific node
+                });
+
+            nodeEnter.append("text")
+                .style("fill", "white") // Set all text to white
+                .style("font-weight", function (d) {
+                    return d.id === "ซอฟต์พาวเวอร์อีสาน" ? "bold" : "normal"; // Bold font for the specific node
+                })
+                .style("text-anchor", "middle")
+                .style("font-size", function (d) {
+                    return d.id === "ซอฟต์พาวเวอร์อีสาน" ? "16px" : "10px"; // Larger font size for the specific node
+                })
+                .text(function (d) { return d.id; });
+
+            force.start();
+
+            function updateNetwork() {
+                container.selectAll("line").each(function (d) {
+                    var startCoords = offsetEdge(d, sizeScale(d.source.weight), sizeScale(d.target.weight));
+                    d3.select(this)
+                        .attr("x1", startCoords.x1)
+                        .attr("y1", startCoords.y1)
+                        .attr("x2", startCoords.x2)
+                        .attr("y2", startCoords.y2);
+                });
+
+                container.selectAll("circle.node")
+                    .attr("r", function (d) {
+                        return d.id === "ซอฟต์พาวเวอร์อีสาน" ? 50 : sizeScale(d.weight); // Apply large size again for update
+                    });
+
+                container.selectAll("g.node")
+                    .attr("transform", function (d) { return "translate(" + d.x + "," + d.y + ")"; });
+            }
+        }
+
+        // JavaScript to close the description
+        document.getElementById('closeBtn').onclick = function () {
+            document.getElementById('description').style.display = 'none';
+        };
+    </script>
+</body>
+
+</html>
